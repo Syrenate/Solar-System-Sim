@@ -33,29 +33,20 @@ class Vector2D:
         mag = self.magnitude()
         return Vector2D((self.x / mag, self.y / mag))
     
-class CelestialBody:
-    """Class which represents an abstract celestial body in the solar system, i.e. a star or planet."""
-    def __init__(self, reference_space, body_parameters, body_type):
-        """Constructor method which sets the physical and visual parameters of the body."""
-        self.name = body_parameters['name']
-        self.mass = body_parameters['mass']
-        self.colour = body_parameters['colour']
-        self.type = body_type
-        self.space = reference_space
-        
-        self.position = Vector2D((body_parameters['orbital_radius'], 0))
-        # Initialise velocity based on Kepler approximation for a planets's stable orbit radius.
-        init_velocity = math.sqrt(self.space.grav_constant * (self.space.star.mass) / body_parameters['orbital_radius']) if body_type == "planet" else 0
-        self.velocity = Vector2D((0, init_velocity))
-        self.acceleration = Vector2D((0,0))
-        self.prev_acceleration = Vector2D((0,0))
-        
-        self.position_trail = []
+class Object:
+    """Class representing a physical object with momentum in some space."""
+    def __init__(self, space, parameters, init):
+        self.name = parameters['name']
+        self.mass = parameters['mass']
+        self.space = space
+
+        self.position = Vector2D(init[0])
+        self.velocity = Vector2D(init[1])
+        self.acceleration = Vector2D(init[2])
 
     def beeman_update(self, is_final):
-        """This method is called to update the position of the body, and subsequently apply the Beeman integration method to all bodies if all positions have been updated (is_final)."""
+        """Beeman integration method to update positions, and subsequently update velocity of all bodies if all positions have been updated (is_final)."""
         # First predict the position of the body based on data at time steps (t) and (t - time_step).
-        self.prev_position = self.position
         self.position += self.velocity.scale(self.space.time_step) + (self.acceleration.scale(4) - self.prev_acceleration).scale(((self.space.time_step ** 2) / 6))
 
         if is_final:    # If all positions have been updatad, evaluate new velocity of each body.
@@ -70,16 +61,35 @@ class CelestialBody:
                 body.acceleration = new_acceleration
 
     def euler_cromer_update(self, bodies_copy):
+        """Method to implement Euler-Cromer integration for updating object positions."""
         self.acceleration = self.get_acceleration(bodies_copy)
         self.velocity += self.acceleration.scale(self.space.time_step)
         self.position += self.velocity.scale(self.space.time_step)
         
     def direct_euler_update(self, bodies_copy):
+        """Method to implement direct-Euler integration for updating object positions."""
         self.acceleration = self.get_acceleration(bodies_copy)
         self.position += self.velocity.scale(self.space.time_step)
         self.velocity += self.acceleration.scale(self.space.time_step)
 
+
+class CelestialBody(Object):
+    """Class which represents an abstract celestial body in the solar system, i.e. a star or planet."""
+    def __init__(self, reference_space, body_parameters, body_type, init):
+        """Constructor method which sets the physical and visual parameters of the body."""
+        super().__init__(reference_space, body_parameters, init)
+        self.colour = body_parameters['colour']
+        self.type = body_type
+        
+        self.acceleration = Vector2D((0,0))
+        self.prev_acceleration = Vector2D((0,0))   # For use in Beeman integration.
+        
+        self.trail_sample = 2           # Sample position every this many frames.
+        self.position_trail = []        # Record of recent positions to create a path between them, creating a trail of the body.
+
+
     def get_acceleration(self, focus_objects):
+        """Method to get the acceleration of self under the influence of a list of focus_bodies."""
         total_force = Vector2D((0,0))
         for focus in focus_objects:
             if self.name != focus.name:
@@ -89,18 +99,22 @@ class CelestialBody:
     
 class Planet(CelestialBody):
     """Class for planet to handle orbital periods and such."""
-    def __init__(self, space, body_parameters, nasa_prediction):
+    def __init__(self, reference_space, body_parameters):
         """Constructor method for planet, which defined the unique properties of orbit around a star."""
-        super().__init__(space, body_parameters, "planet")
 
+        # Initialise position and velocity based on Kepler approximation for a planets's stable orbit radius.
+        init_pos, init_velocity = body_parameters['orbital_radius'], math.sqrt(reference_space.grav_constant * (reference_space.star.mass) / body_parameters['orbital_radius'])
+        super().__init__(reference_space, body_parameters, "planet", [(init_pos, 0), (0,init_velocity), (0, 0)])
+    
         self.orbital_period = 0
-        self.nasa_orbital_period = nasa_prediction
+        self.is_real = body_parameters['is_real']
+        self.nasa_orbital_period = body_parameters['nasa_orbit_period'] if self.is_real else 0
         self.orbit_output = ""
         self.has_revolved = False
 
         self.angle_from_xaxis = 0
 
-    def gen_orbit_output(self):
+    def generate_orbit_output(self):
         """Method to generate a string that contains the essential orbit information of the planet."""
         self.orbit_output = f"     Planet: {self.name[0].upper() + self.name[1:] if len(self.name) > 1 else self.name.upper()}, Orbital Period: {round(self.orbital_period, 3)}Y"
-        self.orbit_output += ((60 - len(self.orbit_output)) * ' ') + f"NASA Result: {self.nasa_orbital_period}Y\n"
+        self.orbit_output += ((60 - len(self.orbit_output)) * ' ') + (f"NASA Result: {self.nasa_orbital_period}Y\n" if self.is_real else "\n")

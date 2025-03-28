@@ -9,3 +9,5 @@ Instructions for use:
         - Options: 'beeman_integration', 'euler_cromer', or 'direct_euler'.
     - Most experimental data is output to the console, including some simulation data.
     - Interactive matplotlib sliders allow the real-time adjustment of certain parameters. PLEASE DONT CHANGE THEM TOO FAST :>
+
+    - To add, modify or remove a planet, or change simulation parameters, run AddPlanet.py and follow console instructions.
