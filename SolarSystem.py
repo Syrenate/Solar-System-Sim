@@ -194,12 +194,12 @@ class Simulation:
 
 
         self.space.update(iteration)    # Update the reference space immediately.
-        #for i in range(len(self.space.bodies)):     # Modify the patches of planets and their trails based on this update.
-        #    body = self.space.bodies[i]
-        #    self.patches[i].center = (body.position - self.space_reference_object.position).get()
-        #    if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
+        for i in range(len(self.space.bodies)):     # Modify the patches of planets and their trails based on this update.
+            body = self.space.bodies[i]
+            self.patches[i].center = (body.position - self.space_reference_object.position).get()
+            if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
 
-        
+
 
         # Calculation for framerate
         self.framerate_history.append(time.time() - self.start_update_time)
