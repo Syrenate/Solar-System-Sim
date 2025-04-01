@@ -2,6 +2,7 @@ import math
 import numpy as np
 
 class Vector2D:
+    """Class to represent and handle arithmetic of 2D vectors, used as acceleration vectors for example."""
     def __init__(self, pos):
         self.set(pos)
 
@@ -27,11 +28,13 @@ class Vector2D:
         return self.x * pos.x + self.y * pos.y
 
     def angle_between_xaxis(self):
-        return np.arccos(np.clip(self.normalise().x, -1, 1))
+        """Method to return the angle between the vector and the positive x-axis, specifically the vector (1,0)."""
+        angle = np.arccos(np.clip(self.normalise().x, -1, 1))
+        if self.y < 0: return 2 * math.pi - angle
+        else: return angle
     
-    def normalise(self):
-        mag = self.magnitude()
-        return Vector2D((self.x / mag, self.y / mag))
+    def normalise(self): 
+        return Vector2D((self.x, self.y)).scale(1/self.magnitude())
     
 class Object:
     """Class representing a physical object with momentum in some space."""
@@ -43,6 +46,7 @@ class Object:
         self.position = Vector2D(init[0])
         self.velocity = Vector2D(init[1])
         self.acceleration = Vector2D(init[2])
+        self.prev_acceleration = Vector2D((0,0))   # For use in Beeman integration.
 
     def beeman_update(self, is_final):
         """Beeman integration method to update positions, and subsequently update velocity of all bodies if all positions have been updated (is_final)."""
@@ -72,6 +76,14 @@ class Object:
         self.position += self.velocity.scale(self.space.time_step)
         self.velocity += self.acceleration.scale(self.space.time_step)
 
+    def get_acceleration(self, focus_objects):
+        """Method to get the acceleration of self under the influence of a list of focus_bodies."""
+        acceleration = Vector2D((0,0))
+        for focus in focus_objects:
+            if self.name != focus.name:
+                distance_sqr = (self.position.x - focus.position.x) ** 2 + (self.position.y - focus.position.y) ** 2
+                acceleration += (focus.position - self.position).normalise().scale((focus.mass) / distance_sqr)
+        return acceleration.scale(self.space.grav_constant)
 
 class CelestialBody(Object):
     """Class which represents an abstract celestial body in the solar system, i.e. a star or planet."""
@@ -81,34 +93,21 @@ class CelestialBody(Object):
         self.colour = body_parameters['colour']
         self.type = body_type
         
-        self.acceleration = Vector2D((0,0))
-        self.prev_acceleration = Vector2D((0,0))   # For use in Beeman integration.
-        
         self.trail_sample = 2           # Sample position every this many frames.
         self.position_trail = []        # Record of recent positions to create a path between them, creating a trail of the body.
-
-
-    def get_acceleration(self, focus_objects):
-        """Method to get the acceleration of self under the influence of a list of focus_bodies."""
-        total_force = Vector2D((0,0))
-        for focus in focus_objects:
-            if self.name != focus.name:
-                distance_sqr = (self.position.x - focus.position.x) ** 2 + (self.position.y - focus.position.y) ** 2
-                total_force += (focus.position - self.position).normalise().scale((focus.mass) / distance_sqr)
-        return total_force.scale(self.space.grav_constant)
     
 class Planet(CelestialBody):
     """Class for planet to handle orbital periods and such."""
     def __init__(self, reference_space, body_parameters):
-        """Constructor method for planet, which defined the unique properties of orbit around a star."""
+        """Constructor method for planet, which defines the properties for orbiting a star."""
 
         # Initialise position and velocity based on Kepler approximation for a planets's stable orbit radius.
         init_pos, init_velocity = body_parameters['orbital_radius'], math.sqrt(reference_space.grav_constant * (reference_space.star.mass) / body_parameters['orbital_radius'])
         super().__init__(reference_space, body_parameters, "planet", [(init_pos, 0), (0,init_velocity), (0, 0)])
     
         self.orbital_period = 0
-        self.is_real = body_parameters['is_real']
-        self.nasa_orbital_period = body_parameters['nasa_orbit_period'] if self.is_real else 0
+        self.is_study = body_parameters['is_study']
+        self.nasa_orbital_period = body_parameters['nasa_orbit_period'] if self.is_study else 0
         self.orbit_output = ""
         self.has_revolved = False
 
@@ -117,4 +116,4 @@ class Planet(CelestialBody):
     def generate_orbit_output(self):
         """Method to generate a string that contains the essential orbit information of the planet."""
         self.orbit_output = f"     Planet: {self.name[0].upper() + self.name[1:] if len(self.name) > 1 else self.name.upper()}, Orbital Period: {round(self.orbital_period, 3)}Y"
-        self.orbit_output += ((60 - len(self.orbit_output)) * ' ') + (f"NASA Result: {self.nasa_orbital_period}Y\n" if self.is_real else "\n")
+        self.orbit_output += ((60 - len(self.orbit_output)) * ' ') + (f"NASA Result: {self.nasa_orbital_period}Y [delta: {round(self.nasa_orbital_period - self.orbital_period, 3)}]\n" if self.is_study else "\n")

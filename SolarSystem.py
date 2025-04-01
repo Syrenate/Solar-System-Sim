@@ -12,17 +12,18 @@ from matplotlib.animation import FuncAnimation
 
 from BodyClasses import CelestialBody, Planet
 
+file_name = "simulation_parameters.json"
+
 class Space:
-    """Class in which the simulation is contained; all simulation and rendering occours here."""
-    def __init__(self, solar_parameters, file):
+    """Class containing a complete physical model of the solar system."""
+    def __init__(self, solar_parameters):
         """Constructor method in which the solar parameters are parsed to initialise the many-body system."""
         self.time_step = solar_parameters['timestep']               # Time step; the time interval to be simulated each frame.
         self.original_time_step = solar_parameters['timestep']      # Copy of the time_step parameter for use once the main value is changed.
         self.grav_constant = solar_parameters['grav_const']
         self.integration_type = solar_parameters['integration_method']
 
-        self.greatest_orbital_radius = 0    # Records greatest orbit to set axis limits in the simulaiton.
-        self.json_file = file               # Reference to the json file so that data may be written in.
+        self.greatest_orbital_radii = 0    # Records greatest orbit to set axis limits in the simulaiton.
         self.elapsed_time = 0
 
         self.energy_level_history = []           # Record of previous energy levels for study.
@@ -41,10 +42,10 @@ class Space:
             self.body_count += 1 
 
             # Compare radius to the greatest radius recorded; replace if greater. This ensures all planets are on screen at 100% zoom.
-            if body['orbital_radius'] > self.greatest_orbital_radius: self.greatest_orbital_radius = body['orbital_radius']
+            if body['orbital_radius'] > self.greatest_orbital_radii: self.greatest_orbital_radii = body['orbital_radius']
 
         for planet in self.planets:     # Once the greatest radius has been evaluated, set the trail sample of each planet. This should be proportional to the planet's orbital radius.
-            planet.trail_length_limit = math.ceil(300 * (planet.position.x / self.greatest_orbital_radius) + 50)
+            planet.trail_length_limit = math.ceil(300 * (planet.position.x / self.greatest_orbital_radii) + 50)
   
         self.bodies = [self.star] + self.planets    # Array of all celestial bodies
 
@@ -67,14 +68,18 @@ class Space:
                     body.has_revolved = True    
                     body.generate_orbit_output()
 
-                body.angle_from_xaxis = body.position.angle_between_xaxis()     # Simplified from dot product formula with (1,0), the +ve x-axis.
-
             if body.type != "star":     # Every non-star body should have a trail (since the star should be centered).
                 if iteration % body.trail_sample == 0: body.position_trail.append((body.position - self.star.position).get())
                 if len(body.position_trail) > body.trail_length_limit: body.position_trail = body.position_trail[1:]
         
         energy = sum(self.get_energy_levels())    # Evaluate current energy level of the system & add to history.
+
         if iteration % self.energy_sample: 
+            with open(file_name, 'r') as file:
+                parameters = json.load(file)
+                parameters['total_energy'] = round(energy, 2)
+            with open(file_name, 'w') as file:
+                json.dump(parameters, file)
             self.energy_level_history.append(energy)
             if len(self.energy_level_history) > self.energy_history_sample_size: 
                 self.energy_level_history = self.energy_level_history[1:]
@@ -83,9 +88,7 @@ class Space:
         """Method which checks planetary alignment"""
         alignments = []
         for planet in self.planets[:self.alignment_sample]:    # First generate the angle from 0 to 2pi with the +ve x-axis for each planet.
-            angle = planet.position.angle_between_xaxis()
-            if planet.position.y < 0: angle = 2 * math.pi - angle
-            alignments.append(angle)
+            alignments.append(planet.position.angle_between_xaxis())
 
         mean_angle = np.mean(alignments)
         alligned = True     
@@ -129,11 +132,11 @@ class Simulation:
         plt.rcParams['axes.labelcolor'] = colour
         plt.rcParams['xtick.color'] = colour
         plt.rcParams['ytick.color'] = colour
+        self.body_sizes = {"star": 0.2, "planet": 0.1, "moon": 0.05}
 
         self.space = reference_space        # Keep reference to the instance of Space we're simulating.
         self.space_reference_object = reference_space.star
         self.sim_fig, self.sim_ax = plt.figure(0), self.generate_simulation_axes()   # Initialise the simulation axes.
-        self.sim_annotations = []
 
         self.sim_fig.set_facecolor((0.12,0.12,0.12))
         self.sim_ax.patch.set_edgecolor('white')
@@ -142,7 +145,7 @@ class Simulation:
         plt.title("Many-Body Simulation of our Solar System", color='white')
 
         def update_simulation_limit(val):   # Method to rescale the simulation boundary to zoom in/out.
-            scale = self.space.greatest_orbital_radius / val
+            scale = self.space.greatest_orbital_radii / val
             self.sim_ax.set_xlim(-scale, scale)
             self.sim_ax.set_ylim(-scale, scale)
 
@@ -180,22 +183,26 @@ class Simulation:
         self.zoom_slider.on_changed(update_simulation_limit)
         self.time_slider.on_changed(update_time_scale)
 
+        self.start_update_time = time.time()
+
     def update(self, iteration):
         """Method that handles iterating to the next frame of the simulation."""
         if self.paused: return []
-        start_update_time = time.time()
 
         self.elapsed_time += self.space.time_step
         self.elapsed_frames += 1
 
-        self.space.update(iteration)    # Update the reference space immediately.
-        for i in range(len(self.space.bodies)):     # Modify the patches of planets and their trails based on this update.
-            body = self.space.bodies[i]
-            self.patches[i].center = (body.position - self.space_reference_object.position).get()
-            if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
 
-        time_delay = time.time() - start_update_time
-        if time_delay != 0: self.framerate_history.append(1/time_delay)
+        self.space.update(iteration)    # Update the reference space immediately.
+        #for i in range(len(self.space.bodies)):     # Modify the patches of planets and their trails based on this update.
+        #    body = self.space.bodies[i]
+        #    self.patches[i].center = (body.position - self.space_reference_object.position).get()
+        #    if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
+
+        
+
+        # Calculation for framerate
+        self.framerate_history.append(time.time() - self.start_update_time)
         if len(self.framerate_history) > self.framerate_history_length: self.framerate_history = self.framerate_history[1:]
 
         # Generate a console output of simulation data every 30 frames.
@@ -204,6 +211,7 @@ class Simulation:
             elif self.default_os == "linux": os.system('clear')
             print(self.generate_output())
 
+        self.start_update_time = time.time()
         return self.patches         # FuncAnimation requires returning all artists which should be rendered.
 
     def run(self):
@@ -212,20 +220,14 @@ class Simulation:
         self.anim = FuncAnimation(self.sim_fig, self.update, frames=self.iteration_limit, repeat=False, interval=1/3000, blit=True)
         plt.show()
 
-    def update_patch_positions(self):
-        for i in range(len(self.space.bodies)):
-            body = self.space.bodies[i]
-            self.patches[i].center = (body.position - self.space_reference_object.position).get()
-            if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
-
     def generate_simulation_axes(self):
         """Method to create patches for each simulation element; all physical objects and their trails if applicable."""
         ax = plt.axes()
         self.patches = []
         for body in [self.space.star] + self.space.planets:     # Render each celestial body
             # Planets further from the star should have greater radius for better visibility.
-            radius_scalar = 1 + 3 * ((body.position.x / self.space.greatest_orbital_radius) ** 4) if body.type == "planet" else 1 
-            self.patches.append(mpatches.Circle(body.position.get(), 0.1 * radius_scalar, color = body.colour, animated = True))
+            #radius_scalar = 0.1 + 0.3 * ((body.position.x / self.space.greatest_orbital_radii) ** 4) if body.type == "planet" else 0.1 
+            self.patches.append(mpatches.Circle(body.position.get(), self.body_sizes[body.type], color = body.colour, animated = True))
             ax.add_patch(self.patches[-1])
 
         for planet in self.space.planets:     # Render the trail of each planet
@@ -241,10 +243,11 @@ class Simulation:
         output = ""
 
         elapsed_real_time = (time.time() - self.simulation_start_time) / 60
-        frame_rate = np.mean(self.framerate_history)
+        frame_rate = 1/np.mean(self.framerate_history)
 
         simulation_output =  f"     Elapsed simulation time: {round(self.elapsed_time, 3)} Years  [Real time: {math.floor(elapsed_real_time)} min {round((elapsed_real_time - math.floor(elapsed_real_time)) * 60)}s]\n"
-        simulation_output += f"     Current frame: {self.elapsed_frames}/{self.iteration_limit} (Framerate: {round(frame_rate, 2)}fps)\n"
+        simulation_output += f"     Current frame: {self.elapsed_frames}/{self.iteration_limit}"
+        simulation_output += f" ({round(100 * self.elapsed_frames / self.iteration_limit, 2)}% elapsed, framerate: {round(frame_rate, 2)}fps)\n"
         simulation_output += f"     Simulation speed: {round(self.space.time_step * frame_rate, 2)} years per simulation second."
         output += "Simulation data:\n" + simulation_output + "\n\n"
 
@@ -261,18 +264,19 @@ class Simulation:
         output += "Energy Levels (Experiment 2):\n" + energy_output + "\n\n"
 
         # Experiment 4
-        allignmnet_output = f"Alignment occourances (Experiment 4): \n"
+        alignmnet_output = f"Alignment occourances (Experiment 4): \n"
+        alignmnet_output += f"     - Current study: {self.space.alignment_sample} planets allign within {round(self.space.alignment_tolerance * 180 / math.pi)} degrees of their mean.\n"
         alignment_rounded = []
         for data in self.space.alignment_history: alignment_rounded.append(round(data, 2))
-        allignmnet_output += f"     Years at which planets have alligned: {alignment_rounded}" 
-        output += allignmnet_output
+        alignmnet_output += f"     Years at which planets have alligned: {alignment_rounded}" 
+        output += alignmnet_output
 
         return output
 
 if __name__ == "__main__":
-    with open("simulation_parameters.json") as param_file: 
-        parameters = json.load(param_file)
-        space = Space(parameters, param_file)
+    with open(file_name) as file: 
+        parameters = json.load(file)
+        space = Space(parameters)
     simulation = Simulation(space, parameters)
     
     simulation.run()

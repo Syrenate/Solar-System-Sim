@@ -1,4 +1,5 @@
 import json
+import time
 
 if __name__ == "__main__":
     run_interface = True
@@ -9,17 +10,24 @@ if __name__ == "__main__":
         print("     3. Remove a planet")
         print("     4. Modify simulation data")
         print("     5. Exit the interface.\n")
-        user_choice = input("Please select from options 1-5: ")
+        user_choice = input("Please select from options 1-5: "); time.sleep(0.5)
+
+        if user_choice[0] in ['2','3']: 
+            print("Current bodies: ")
+            with open("simulation_parameters.json", 'r') as file:
+                bodies = json.load(file)['bodies']
+                for body in bodies:
+                    print(f"    -{body['type']}, name: {body['name']}.")
 
         if user_choice[0] == '1':
-            print("\nCreating planet. Please ensure units are SI relative to Earth (for example, mass should be the ratio of YOUR planet's mass to EARTH'S.).")
+            print("Creating planet. Please ensure units are SI relative to Earth (for example, mass should be the ratio of YOUR planet's mass to EARTH'S.).")
             planet = {}
-            planet["name"] = input("Planet name: ")
+            planet["name"] = input("Planet name: "); time.sleep(0.3)
             planet["type"] = "planet"
-            planet["mass"] = float(input("Planet's mass: "))
-            planet["orbital_radius"] = float(input("Orbital radius: "))
-            planet["is_real"] = False
-            planet["colour"] = input("Planet's colour: ")
+            planet["mass"] = float(input("Planet's mass: ")); time.sleep(0.3)
+            planet["orbital_radius"] = float(input("Orbital radius: ")); time.sleep(0.3)
+            planet["is_study"] = False
+            planet["colour"] = input("Planet's colour: "); time.sleep(0.5)
 
             with open("simulation_parameters.json", 'r') as file:
                 parameters = json.load(file)
@@ -33,6 +41,7 @@ if __name__ == "__main__":
             
         if user_choice[0] == '2':
             name = input("Modifying planet. Enter the planet's name: ")
+            time.sleep(0.3)
 
             found = False
             with open("simulation_parameters.json", 'r') as file:
@@ -49,8 +58,8 @@ if __name__ == "__main__":
                 print("Planet not found!")
                 break
             else: 
-                choice = input(f"Enter the property you wish to modify {planet.keys()}: ")
-                value = input("Enter the value to change to: ")
+                choice = input(f"Enter the property you wish to modify {planet.keys()}: "); time.sleep(0.3)
+                value = input(f"Enter the value to change to: [current: {planet[choice] }]"); time.sleep(0.3)
 
                 if not choice in ["name", "colour", "type"]: value = float(value)
                 planet[choice] = value
@@ -58,6 +67,8 @@ if __name__ == "__main__":
 
                 with open("simulation_parameters.json", 'w') as file:
                     json.dump(parameters, file)
+
+                print("Modified!")
 
 
         if user_choice[0] == '3':
@@ -79,6 +90,7 @@ if __name__ == "__main__":
             else:
                 with open("simulation_parameters.json", 'w') as file:
                     json.dump(parameters, file)
+                time.sleep(0.5)
                 print("Removed!")
         elif user_choice[0] == '5': run_interface = False
         print("\n")
