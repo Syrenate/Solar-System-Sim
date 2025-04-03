@@ -12,7 +12,8 @@ from matplotlib.animation import FuncAnimation
 
 from BodyClasses import CelestialBody, Planet
 
-file_name = "simulation_parameters.json"
+parameter_file_name = "simulation_parameters.json"
+energy_file_name = "energy_level_data.txt"
 
 class Space:
     """Class containing a complete physical model of the solar system."""
@@ -26,9 +27,12 @@ class Space:
         self.greatest_orbital_radii = 0    # Records greatest orbit to set axis limits in the simulaiton.
         self.elapsed_time = 0
 
-        self.energy_level_history = []           # Record of previous energy levels for study.
-        self.energy_history_sample_size = 1000   # Desired maximum length of energy_level_history.
-        self.energy_sample = 100                 # When recording the energy level, only sample every energy_sample frames.
+        self.k_energy_level_history = []           # Record of previous energy levels for study.
+        self.p_energy_level_history = []
+        self.energy_level_history = []
+
+        self.energy_history_sample_size = solar_parameters['experiment_2']['energy_sample_size']  # Desired maximum length of energy_level_history.
+        self.energy_sample = solar_parameters['experiment_2']['energy_sample']                    # When recording the energy level, only sample every energy_sample frames.
 
         self.alignment_history = []      # Record occourances of planetary alignment.
         self.alignment_sample = solar_parameters['experiment_4']['planet_sample_size']        # How many planets should be considered for alignment.
@@ -51,7 +55,6 @@ class Space:
 
     def update(self, iteration: int):
         """Method to simulate planetary motion in one time step."""
-        self.elapsed_time += self.time_step
         self.determine_alignment()
         bodies_copy = self.bodies.copy()
 
@@ -71,18 +74,10 @@ class Space:
             if body.type != "star":     # Every non-star body should have a trail (since the star should be centered).
                 if iteration % body.trail_sample == 0: body.position_trail.append((body.position - self.star.position).get())
                 if len(body.position_trail) > body.trail_length_limit: body.position_trail = body.position_trail[1:]
-        
-        energy = sum(self.get_energy_levels())    # Evaluate current energy level of the system & add to history.
 
-        if iteration % self.energy_sample: 
-            with open(file_name, 'r') as file:
-                parameters = json.load(file)
-                parameters['total_energy'] = round(energy, 2)
-            with open(file_name, 'w') as file:
-                json.dump(parameters, file)
-            self.energy_level_history.append(energy)
-            if len(self.energy_level_history) > self.energy_history_sample_size: 
+        if len(self.energy_level_history) > self.energy_history_sample_size: 
                 self.energy_level_history = self.energy_level_history[1:]
+        self.elapsed_time += self.time_step
     
     def determine_alignment(self):
         """Method which checks planetary alignment"""
@@ -121,7 +116,6 @@ class Simulation:
         self.default_os = parameters['default_os']              # The operating system specified; used for clearing the console.
         self.iteration_limit = parameters['num_iterations']     # Maximum iterations for the simulation. Terminates once reached.
 
-        self.elapsed_time = 0         
         self.elapsed_frames = 0      
         # To estimate framerate, record the time taken for recent frames and take an average.   
         self.framerate_history = []          # Store recent frame data.
@@ -136,7 +130,7 @@ class Simulation:
 
         self.space = reference_space        # Keep reference to the instance of Space we're simulating.
         self.space_reference_object = reference_space.star
-        self.sim_fig, self.sim_ax = plt.figure(0), self.generate_simulation_axes()   # Initialise the simulation axes.
+        self.sim_fig, self.sim_ax = plt.figure(1), self.generate_simulation_axes()   # Initialise the simulation axes.
 
         self.sim_fig.set_facecolor((0.12,0.12,0.12))
         self.sim_ax.patch.set_edgecolor('white')
@@ -189,9 +183,7 @@ class Simulation:
         """Method that handles iterating to the next frame of the simulation."""
         if self.paused: return []
 
-        self.elapsed_time += self.space.time_step
         self.elapsed_frames += 1
-
 
         self.space.update(iteration)    # Update the reference space immediately.
         for i in range(len(self.space.bodies)):     # Modify the patches of planets and their trails based on this update.
@@ -199,17 +191,27 @@ class Simulation:
             self.patches[i].center = (body.position - self.space_reference_object.position).get()
             if body.type == "planet": self.patches[i + self.space.body_count - 1].set_path(matplotlib.path.Path(body.position_trail))
 
-
-
         # Calculation for framerate
         self.framerate_history.append(time.time() - self.start_update_time)
         if len(self.framerate_history) > self.framerate_history_length: self.framerate_history = self.framerate_history[1:]
 
+        k_energy, p_energy = self.space.get_energy_levels()
+        if iteration % self.space.energy_sample == 0:
+            self.space.k_energy_level_history.append(k_energy)
+            self.space.p_energy_level_history.append(p_energy)
+            self.space.energy_level_history.append(k_energy + p_energy)
+            
+            with open(energy_file_name, 'a') as file: 
+                #time_str = f"Frame {iteration} ({round(self.space.elapsed_time,2)}Y)"
+                #energy_str = f"Energy levels: [Kinetic: {round(k_energy,3)}, Potential: {round(p_energy,3)}]."
+                #file.write(time_str + (' '*(25 - len(time_str))) + (energy_str + (' '*(60 - len(energy_str)))) + f"Total energy: {round(k_energy + p_energy,3)}.\n")
+                file.write(f"{k_energy}    {p_energy}\n")
+                            
         # Generate a console output of simulation data every 30 frames.
-        if iteration % 30 == 0:
+        if iteration % 30 == 0 or iteration == self.iteration_limit - 1:
             if self.default_os == "windows": os.system('cls')
             elif self.default_os == "linux": os.system('clear')
-            print(self.generate_output())
+            print(self.generate_output(k_energy, p_energy))
 
         self.start_update_time = time.time()
         return self.patches         # FuncAnimation requires returning all artists which should be rendered.
@@ -217,7 +219,7 @@ class Simulation:
     def run(self):
         """Method called to initialise the simulation."""
         self.simulation_start_time = time.time()
-        self.anim = FuncAnimation(self.sim_fig, self.update, frames=self.iteration_limit, repeat=False, interval=1/3000, blit=True)
+        self.anim = FuncAnimation(self.sim_fig, self.update, frames=self.iteration_limit, repeat=False, interval=1/30000, blit=True)
         plt.show()
 
     def generate_simulation_axes(self):
@@ -238,14 +240,14 @@ class Simulation:
 
         return ax
 
-    def generate_output(self):
+    def generate_output(self, k_energy, p_energy):
         """Method which generates a console output of simulation and experiment data."""
         output = ""
 
         elapsed_real_time = (time.time() - self.simulation_start_time) / 60
         frame_rate = 1/np.mean(self.framerate_history)
 
-        simulation_output =  f"     Elapsed simulation time: {round(self.elapsed_time, 3)} Years  [Real time: {math.floor(elapsed_real_time)} min {round((elapsed_real_time - math.floor(elapsed_real_time)) * 60)}s]\n"
+        simulation_output =  f"     Elapsed simulation time: {round(self.space.elapsed_time, 3)} Years  [Real time: {math.floor(elapsed_real_time)} min {round((elapsed_real_time - math.floor(elapsed_real_time)) * 60)}s]\n"
         simulation_output += f"     Current frame: {self.elapsed_frames}/{self.iteration_limit}"
         simulation_output += f" ({round(100 * self.elapsed_frames / self.iteration_limit, 2)}% elapsed, framerate: {round(frame_rate, 2)}fps)\n"
         simulation_output += f"     Simulation speed: {round(self.space.time_step * frame_rate, 2)} years per simulation second."
@@ -257,7 +259,6 @@ class Simulation:
         if len(planet_output) > 0: output += "Orbital Periods (Experiment 1):\n" + planet_output + "\n"
 
         # Experiment 2
-        k_energy, p_energy = self.space.get_energy_levels()
         energy_output =  f"     Kinetic Energy: {round(k_energy, 3)}, Potential Energy: {round(p_energy, 3)}\n"
         energy_output += f"     Total Energy: {round(k_energy + p_energy, 3)}. "
         energy_output += f"Recent standard deviation [sample size: {len(self.space.energy_level_history)}]: {round(math.sqrt(np.var(self.space.energy_level_history)), 3)}"
@@ -274,9 +275,10 @@ class Simulation:
         return output
 
 if __name__ == "__main__":
-    with open(file_name) as file: 
+    with open(energy_file_name, 'w') as file: file.write("")
+    with open(parameter_file_name) as file: 
         parameters = json.load(file)
         space = Space(parameters)
+
     simulation = Simulation(space, parameters)
-    
     simulation.run()
