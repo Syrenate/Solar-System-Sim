@@ -22,7 +22,6 @@ class Space:
         self.time_step = solar_parameters['timestep']               # Time step; the time interval to be simulated each frame.
         self.original_time_step = solar_parameters['timestep']      # Copy of the time_step parameter for use once the main value is changed.
         self.grav_constant = solar_parameters['grav_const']
-        self.integration_type = solar_parameters['integration_method']
 
         self.greatest_orbital_radii = 0    # Records greatest orbit to set axis limits in the simulaiton.
         self.elapsed_time = 0
@@ -33,6 +32,7 @@ class Space:
 
         self.energy_history_sample_size = solar_parameters['experiment_2']['energy_sample_size']  # Desired maximum length of energy_level_history.
         self.energy_sample = solar_parameters['experiment_2']['energy_sample']                    # When recording the energy level, only sample every energy_sample frames.
+        self.integration_type = solar_parameters['experiment_2']['integration_method']
 
         self.alignment_history = []      # Record occourances of planetary alignment.
         self.alignment_sample = solar_parameters['experiment_4']['planet_sample_size']        # How many planets should be considered for alignment.
@@ -83,7 +83,7 @@ class Space:
         """Method which checks planetary alignment"""
         alignments = []
         for planet in self.planets[:self.alignment_sample]:    # First generate the angle from 0 to 2pi with the +ve x-axis for each planet.
-            alignments.append(planet.position.angle_between_xaxis())
+            alignments.append(planet.position.angle_between_xaxis(self.star.position))
 
         mean_angle = np.mean(alignments)
         alligned = True     
@@ -97,15 +97,15 @@ class Space:
                 if min_angle_delta > self.alignment_tolerance: alligned = False
 
         # If planets allign this frame, only append to the list of occourances of alignment if we're certain the current alignment has not been recorded.
-        if (len(self.alignment_history) == 0 and alligned) or (self.planets[0].has_revolved and alligned and np.abs(self.alignment_history[-1] - self.elapsed_time) > self.planets[0].orbital_period): 
-            self.alignment_history.append(float(self.elapsed_time))
+        if (len(self.alignment_history) == 0 and alligned) or (self.planets[0].has_revolved and alligned and np.abs(self.alignment_history[-1][0] - self.elapsed_time) > self.planets[0].orbital_period): 
+            self.alignment_history.append((float(self.elapsed_time), min_angle_delta * (180 / math.pi)))
 
     def get_energy_levels(self):
         """Method that calculates and returns the kinetic & potential energy levels of all bodies."""
         k_energy, p_energy = 0, 0
         for body in self.bodies:
             k_energy += body.mass * (body.velocity.magnitude() ** 2)
-            p_energy -= 0 if body.type == "star" else body.mass / body.position.magnitude()
+            p_energy -= 0 if body.type == "star" else body.mass / (body.position - self.star.position).magnitude()
         return k_energy / 2, p_energy * (self.star.mass * self.grav_constant)
     
 class Simulation:
@@ -202,9 +202,9 @@ class Simulation:
             self.space.energy_level_history.append(k_energy + p_energy)
             
             with open(energy_file_name, 'a') as file: 
-                #time_str = f"Frame {iteration} ({round(self.space.elapsed_time,2)}Y)"
-                #energy_str = f"Energy levels: [Kinetic: {round(k_energy,3)}, Potential: {round(p_energy,3)}]."
-                #file.write(time_str + (' '*(25 - len(time_str))) + (energy_str + (' '*(60 - len(energy_str)))) + f"Total energy: {round(k_energy + p_energy,3)}.\n")
+                time_str = f"Frame {iteration} ({round(self.space.elapsed_time,2)}Y)"
+                energy_str = f"Energy levels: [Kinetic: {round(k_energy,3)}, Potential: {round(p_energy,3)}]."
+                file.write(time_str + (' '*(25 - len(time_str))) + (energy_str + (' '*(60 - len(energy_str)))) + f"Total energy: {round(k_energy + p_energy,3)}.\n")
                 file.write(f"{k_energy}    {p_energy}\n")
                             
         # Generate a console output of simulation data every 30 frames.
@@ -266,10 +266,9 @@ class Simulation:
 
         # Experiment 4
         alignmnet_output = f"Alignment occourances (Experiment 4): \n"
-        alignmnet_output += f"     - Current study: {self.space.alignment_sample} planets allign within {round(self.space.alignment_tolerance * 180 / math.pi)} degrees of their mean.\n"
-        alignment_rounded = []
-        for data in self.space.alignment_history: alignment_rounded.append(round(data, 2))
-        alignmnet_output += f"     Years at which planets have alligned: {alignment_rounded}" 
+        alignmnet_output += f"     - Current study: {self.space.alignment_sample} planets align within {round(self.space.alignment_tolerance * 180 / math.pi)} degrees of their mean.\n"
+        for data in self.space.alignment_history: 
+            alignmnet_output += f"         > At {round(data[0], 2)}Y, planets align within {round(data[1], 2)} degrees of their mean.\n"
         output += alignmnet_output
 
         return output

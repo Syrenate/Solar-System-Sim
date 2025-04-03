@@ -8,6 +8,6 @@ Instructions for use:
     - Experiment 2 investigates different integration techniques; this may be modified in simulation_parameters.json under 'integration_method'. 
         - Options: 'beeman_integration', 'euler_cromer', or 'direct_euler'.
     - Most experimental data is output to the console, including some simulation data.
-    - Interactive matplotlib sliders allow the real-time adjustment of certain parameters. PLEASE DONT CHANGE THEM TOO FAST :>
+    - Interactive matplotlib sliders allow the real-time adjustment of certain parameters.
 
-    - To add, modify or remove a planet, or change simulation parameters, run AddPlanet.py and follow console instructions.
+    - To add, modify or remove a planet, run AddPlanet.py and follow console instructions.

@@ -8,7 +8,6 @@ if __name__ == "__main__":
         print("     1. Create a new planet")
         print("     2. Modify an existing planet")
         print("     3. Remove a planet")
-        print("     4. Modify simulation data")
         print("     5. Exit the interface.\n")
         user_choice = input("Please select from options 1-5: "); time.sleep(0.5)
 

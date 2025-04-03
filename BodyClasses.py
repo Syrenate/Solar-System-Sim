@@ -27,9 +27,9 @@ class Vector2D:
     def dot(self, pos):
         return self.x * pos.x + self.y * pos.y
 
-    def angle_between_xaxis(self):
-        """Method to return the angle between the vector and the positive x-axis, specifically the vector (1,0)."""
-        angle = np.arccos(np.clip(self.normalise().x, -1, 1))
+    def angle_between_xaxis(self, origin_position):
+        """Method to return the angle between the vector and the positive x-axis, specifically the vector (1,0) relative to the origin."""
+        angle = np.arccos(np.clip((self - origin_position).normalise().x, -1, 1))
         if self.y < 0: return 2 * math.pi - angle
         else: return angle
     
