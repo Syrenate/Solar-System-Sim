@@ -205,7 +205,6 @@ class Simulation:
                 time_str = f"Frame {iteration} ({round(self.space.elapsed_time,2)}Y)"
                 energy_str = f"Energy levels: [Kinetic: {round(k_energy,3)}, Potential: {round(p_energy,3)}]."
                 file.write(time_str + (' '*(25 - len(time_str))) + (energy_str + (' '*(60 - len(energy_str)))) + f"Total energy: {round(k_energy + p_energy,3)}.\n")
-                file.write(f"{k_energy}    {p_energy}\n")
                             
         # Generate a console output of simulation data every 30 frames.
         if iteration % 30 == 0 or iteration == self.iteration_limit - 1:

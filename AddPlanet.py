@@ -8,8 +8,8 @@ if __name__ == "__main__":
         print("     1. Create a new planet")
         print("     2. Modify an existing planet")
         print("     3. Remove a planet")
-        print("     5. Exit the interface.\n")
-        user_choice = input("Please select from options 1-5: "); time.sleep(0.5)
+        print("     4. Exit the interface.\n")
+        user_choice = input("Please select from options 1-4: "); time.sleep(0.5)
 
         if user_choice[0] in ['2','3']: 
             print("Current bodies: ")
@@ -91,5 +91,5 @@ if __name__ == "__main__":
                     json.dump(parameters, file)
                 time.sleep(0.5)
                 print("Removed!")
-        elif user_choice[0] == '5': run_interface = False
+        elif user_choice[0] == '4': run_interface = False
         print("\n")
